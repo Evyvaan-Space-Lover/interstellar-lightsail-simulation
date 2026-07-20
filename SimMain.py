@@ -1,7 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import plotly.graph_objects as go
 from decimal import Decimal
+
+from materials import Graphene, Aluminium, SiliconCarbide
+from analysis.plotting import *
 
 #Constants
 c = 3e8 #The Speed of Light in m/s. This is a constant for the simulation, and can be changed to test different scenarios.
@@ -156,7 +158,7 @@ def eul2quat(thetaX, thetaY, thetaZ=0):
 
 
 class RectangleLightSail():
-    def __init__(self, width, height, resolution, StartingX=0, StartingY=0, thetaX=0, thetaY=0):
+    def __init__(self, width, height, resolution, StartingX=0, StartingY=0, thetaX=0, thetaY=0, material=Graphene):
         self.width = width
         self.height = height
         self.resolution = resolution
@@ -180,8 +182,10 @@ class RectangleLightSail():
             [0.0, 0.0, Izz]
         ])
         
-        self.reflectivity = 0.95
-        self.absorptivity = 0.05
+        self.material = material
+        
+        self.reflectivity = self.material.reflectivity
+        self.absorptivity = self.material.absorptivity
         
         self.thetaX = thetaX
         self.thetaY = thetaY
@@ -207,7 +211,9 @@ class RectangleLightSail():
             "force": [],
             "torque": [],
             "orientation": [],
-            "angularVelocity": []
+            "angularVelocity": [],
+            "maxTemperature": [],
+            "averageTemperature": []
         }
     def compute(self):
         self.xPoints=[]
@@ -352,6 +358,13 @@ class RectangleLightSail():
         self.orientation = finalOrientation
         self.angularVelocity = finalangVel
 
+        if self.temperatureMap:
+            self.history["maxTemperature"].append(float(np.max(self.temperatureMap)))
+            self.history["averageTemperature"].append(float(np.mean(self.temperatureMap)))
+        else:
+            self.history["maxTemperature"].append(0.0)
+            self.history["averageTemperature"].append(0.0)
+        
         self.history["time"].append(time)
         self.history["position"].append(self.positionOffset.copy())
         self.history["velocity"].append(self.velocity.copy())
@@ -389,7 +402,7 @@ class RectangleLightSail():
         plt.show()
 
 class SphereLightSail():
-    def __init__(self, radius, resolution, thetaX, thetaY):
+    def __init__(self, radius, resolution, thetaX, thetaY, material = Graphene):
         self.radius = radius
         self.resolution = resolution
         self.mass = 1.0
@@ -400,15 +413,18 @@ class SphereLightSail():
         self.angularVelocity = np.array([0.0, 0.0, 0.0])
         self.angularAcceleration = np.array([0.0, 0.0, 0.0])
         
-        I = (2/3) * self.mass * self.radius*2
+        I = (2/3) * self.mass * (self.radius**2)
         
         self.inertiaTensor = np.array([
             [I, 0.0, 0.0],
             [0.0, I, 0.0],
             [0.0, 0.0, I]
         ])
-        self.reflectivity = 0.95
-        self.absorptivity = 0.05
+        
+        self.material = material
+        
+        self.reflectivity = self.material.reflectivity
+        self.absorptivity = self.material.absorptivity
         self.orientation = eul2quat(thetaX, thetaY) #w, x, y, z
         
         self.Force = None
@@ -428,7 +444,9 @@ class SphereLightSail():
             "force": [],
             "torque": [],
             "orientation": [],
-            "angularVelocity": []
+            "angularVelocity": [],
+            "maxTemperature": [],
+            "averageTemperature": []
         }
 
     def compute(self):
@@ -451,20 +469,18 @@ class SphereLightSail():
                 y = self.radius * np.sin(theta) * np.sin(phi)
                 z = self.radius * np.cos(theta)
                 
-                position = np.array([x, y, z])
-                localPosition = position.copy()
-                position = rotateVector(position, self.orientation)
+                localPosition = np.array([x, y, z])
                 
-                rotatedPos = position.copy()
+                normal = localPosition / np.linalg.norm(localPosition)
                 
-                position += self.positionOffset
+                rotatedPos = rotateVector(localPosition, self.orientation)
+                normal = rotateVector(normal, self.orientation)
+                
+                position = rotatedPos + self.positionOffset
                 
                 self.xPoints.append(position[0])
                 self.yPoints.append(position[1])
                 self.zPoints.append(position[2])
-                
-                normal = position / np.linalg.norm(localPosition)
-                normal = rotateVector(normal, self.orientation)
                 
                 r = np.sqrt(position[0]**2 + position[1]**2)
                 I = gaussian(position[0], position[1], position[2])
@@ -574,6 +590,13 @@ class SphereLightSail():
         self.orientation = finalOrientation
         self.angularVelocity = finalangVel
 
+        if self.temperatureMap:
+            self.history["maxTemperature"].append(float(np.max(self.temperatureMap)))
+            self.history["averageTemperature"].append(float(np.mean(self.temperatureMap)))
+        else:
+            self.history["maxTemperature"].append(0.0)
+            self.history["averageTemperature"].append(0.0)
+        
         self.history["time"].append(time)
         self.history["position"].append(self.positionOffset.copy())
         self.history["velocity"].append(self.velocity.copy())
@@ -608,7 +631,7 @@ class SphereLightSail():
         plt.show()
 
 class ParaboloidLightSail(): #Paraboloid Reflector
-    def __init__(self, radius, a, resolution, thetaX, thetaY):
+    def __init__(self, radius, a, resolution, thetaX, thetaY, material = Graphene):
         self.radius = radius
         self.a = a
         self.resolution = resolution
@@ -629,8 +652,11 @@ class ParaboloidLightSail(): #Paraboloid Reflector
             [0.0, Iyy, 0.0],
             [0.0, 0.0, Izz]
         ])
-        self.reflectivity = 0.95
-        self.absorptivity = 0.05
+        
+        self.material = material
+        
+        self.reflectivity = self.material.reflectivity
+        self.absorptivity = self.material.absorptivity
         self.orientation = eul2quat(thetaX, thetaY) #w, x, y, z
         
         self.velocity = np.array([0.0, 0.0, 0.0])
@@ -652,7 +678,9 @@ class ParaboloidLightSail(): #Paraboloid Reflector
             "force": [],
             "torque": [],
             "orientation": [],
-            "angularVelocity": []
+            "angularVelocity": [],
+            "maxTemperature": [],
+            "averageTemperature": []
         }
     
     def compute(self):
@@ -675,18 +703,20 @@ class ParaboloidLightSail(): #Paraboloid Reflector
                 
                 z = -self.a * (self.radius**2 - r**2)
                 
-                normal = np.array([2 * self.a * x, 2 * self.a * y, 1.0])
-                normal = normal / np.linalg.norm(normal)
+                localPosition = np.array([x, y, z])
                 
-                normal = rotateVector(normal, self.orientation)
+                localNormal = np.array([-2*self.a*x, -2*self.a*y, 1.0])
+                normLength = np.linalg.norm(localNormal)
                 
-                position = np.array([x, y, z])
+                if normLength > 1e-15:
+                    localNormal = localNormal / normLength
+                else:
+                    localNormal = np.array([0.0, 0.0, 1.0])
                 
-                position = rotateVector(position, self.orientation)
+                normal = rotateVector(localNormal, self.orientation)
+                rotatedPos = rotateVector(localPosition, self.orientation)
                 
-                rotatedPos = position.copy()
-                
-                position += self.positionOffset
+                position = rotatedPos + self.positionOffset
                 
                 self.xPoints.append(position[0])
                 self.yPoints.append(position[1])
@@ -710,6 +740,7 @@ class ParaboloidLightSail(): #Paraboloid Reflector
                 
                 self.intensities.append(I)
                 self.temperatureMap.append(temp)
+                
         self.Force = Force
         self.Torque = Torque
         
@@ -798,6 +829,13 @@ class ParaboloidLightSail(): #Paraboloid Reflector
         self.orientation = finalOrientation
         self.angularVelocity = finalangVel
 
+        if self.temperatureMap:
+            self.history["maxTemperature"].append(float(np.max(self.temperatureMap)))
+            self.history["averageTemperature"].append(float(np.mean(self.temperatureMap)))
+        else:
+            self.history["maxTemperature"].append(0.0)
+            self.history["averageTemperature"].append(0.0)
+
         self.history["time"].append(time)
         self.history["position"].append(self.positionOffset.copy())
         self.history["velocity"].append(self.velocity.copy())
@@ -836,19 +874,23 @@ def simLoop(timestep, steps, sail):
     dt = timestep
     print("="*90)
     for step in range(steps):
-        time = np.linalg.norm(time)
-        print(f"Position: {sail.positionOffset} \n Omega: {sail.angularVelocity} \n Torque: {sail.Torque} \n (Time: {time}) \n {'='*45}")
+        print(f"Position: {sail.positionOffset} \n Omega: {sail.angularVelocity} \n Torque: {sail.Torque} \n Force: {sail.Force} \n (Time: {time}) \n {'='*45}")
         sail.compute()
         sail.update(dt, time)
-        
-        
         time += Decimal(str(dt))
-    sail.Visualize()
-    
+    # sail.Visualize()
+    plotForceHistory(sail)
+    plotForceMagnitude(sail)
+    plotPositionHistory(sail)
+    plotVelocityHistory(sail)
+    plotAccelerationHistory(sail)
+    plotAngularVelocityHistory(sail)
+    plotTemperatureHistory(sail)
+    plotTemperatureHistogram(sail)
 
 if __name__ == '__main__':
 
-    nyxRect1 = RectangleLightSail(10, 10, 100, 0, 0, np.radians(0), np.radians(0))
+    nyxRect1 = RectangleLightSail(10, 10, 100, 0, 0, np.radians(0), np.radians(45))
     nyxRect2 = RectangleLightSail(10, 10, 100, 0, 0, np.radians(20), np.radians(0))
     nyxRect3 = RectangleLightSail(10, 10, 100, 0, 0, np.radians(45), np.radians(0))
     nyxRect4 = RectangleLightSail(10, 10, 100, 0, 0, np.radians(90), np.radians(0))
@@ -866,7 +908,7 @@ if __name__ == '__main__':
     simLoop(dt, steps, nyxRect1)
     simLoop(dt, steps, nyxParaboloid1)
     simLoop(dt, steps, nyxSphere1)
-    # simLoop(dt, steps, nyxDisc1)
+    simLoop(dt, steps, nyxDisc1)
 
     # TotalForce, TotalTorque = nyxParaboloid1.compute()
     # print(f"Paraboloid Reflector Test Case 1: \n ================== \n Total force is {TotalForce} \n Total torque is {TotalTorque} \n ==================")
